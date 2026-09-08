@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 
+import { router, Stack } from 'expo-router';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
+  View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { router } from 'expo-router';
-
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { colors, layout, radii, spacing, typography } from '@/theme';
 
 type OptionButtonProps = {
   label: string;
@@ -21,43 +23,35 @@ type OptionButtonProps = {
   onPress: () => void;
 };
 
-function OptionButton({
-  label,
-  selected,
-  onPress,
-}: OptionButtonProps) {
+function OptionButton({ label, selected, onPress }: OptionButtonProps) {
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.optionButton,
         selected && styles.optionButtonSelected,
+        pressed && !selected && styles.optionButtonPressed,
       ]}
       onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
     >
-      <Text
-        style={[
-          styles.optionText,
-          selected && styles.optionTextSelected,
-        ]}
-      >
+      <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 export default function ProfileSetupScreen() {
+  const insets = useSafeAreaInsets();
   const [firstName, setFirstName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState('');
   const [interestedIn, setInterestedIn] = useState('');
   const [aboutMe, setAboutMe] = useState('');
-
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   async function loadUser() {
     const {
@@ -71,56 +65,46 @@ export default function ProfileSetupScreen() {
     }
 
     if (!user) {
-      Alert.alert(
-        'Not logged in',
-        'Please create an account or log in again.'
-      );
-
+      Alert.alert('Not logged in', 'Please create an account or log in again.');
       router.replace('/signup');
       return;
     }
 
-    const savedFirstName =
-      user.user_metadata?.first_name ?? '';
-
-    setFirstName(savedFirstName);
+    setFirstName(user.user_metadata?.first_name ?? '');
   }
+
+  useEffect(() => {
+    const loadTimer = setTimeout(() => {
+      void loadUser();
+    }, 0);
+
+    return () => clearTimeout(loadTimer);
+  }, []);
 
   async function saveProfile() {
     if (!firstName.trim()) {
-      Alert.alert(
-        'Missing information',
-        'Please enter your first name.'
-      );
+      setValidationError('Enter your first name to continue.');
       return;
     }
 
     if (!dateOfBirth.trim()) {
-      Alert.alert(
-        'Missing information',
-        'Please enter your date of birth.'
-      );
+      setValidationError('Enter your date of birth to continue.');
       return;
     }
 
     if (!gender) {
-      Alert.alert(
-        'Missing information',
-        'Please select your gender.'
-      );
+      setValidationError('Select your gender to continue.');
       return;
     }
 
     if (!interestedIn) {
-      Alert.alert(
-        'Missing information',
-        'Please select who you are interested in.'
-      );
+      setValidationError('Select who you are interested in to continue.');
       return;
     }
 
     try {
       setLoading(true);
+      setValidationError(null);
 
       const {
         data: { user },
@@ -132,42 +116,31 @@ export default function ProfileSetupScreen() {
       }
 
       if (!user) {
-        Alert.alert(
-          'Session expired',
-          'Please log in again.'
-        );
-
+        Alert.alert('Session expired', 'Please log in again.');
         router.replace('/signup');
         return;
       }
 
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: user.id,
-          first_name: firstName.trim(),
-          date_of_birth: dateOfBirth.trim(),
-          gender,
-          interested_in: interestedIn,
-          about_me: aboutMe.trim() || null,
-        });
+      const { error } = await supabase.from('profiles').upsert({
+        user_id: user.id,
+        first_name: firstName.trim(),
+        date_of_birth: dateOfBirth.trim(),
+        gender,
+        interested_in: interestedIn,
+        about_me: aboutMe.trim() || null,
+      });
 
       if (error) {
         throw error;
       }
 
-      Alert.alert(
-        'Profile created',
-        'Your profile information has been saved.'
-      );
-
+      Alert.alert('Profile created', 'Your profile information has been saved.');
       router.replace('/add-photo');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Profile error:', error);
-
       Alert.alert(
         'Profile creation failed',
-        error.message ?? 'Something went wrong.'
+        error instanceof Error ? error.message : 'Something went wrong.'
       );
     } finally {
       setLoading(false);
@@ -175,244 +148,210 @@ export default function ProfileSetupScreen() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.title}>
-        Create your profile
-      </Text>
-
-      <Text style={styles.subtitle}>
-        This profile will be visible when you join an
-        EventSpark Social Room.
-      </Text>
-
-      <Text style={styles.label}>
-        First name
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        value={firstName}
-        onChangeText={setFirstName}
-        placeholder="Alex"
-        placeholderTextColor="#666666"
+    <>
+      <Stack.Screen
+        options={{
+          title: 'Create profile',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+        }}
       />
-
-      <Text style={styles.label}>
-        Date of birth
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        value={dateOfBirth}
-        onChangeText={setDateOfBirth}
-        placeholder="2000-12-25"
-        placeholderTextColor="#666666"
-        autoCapitalize="none"
-      />
-
-      <Text style={styles.helper}>
-        Use format YYYY-MM-DD
-      </Text>
-
-      <Text style={styles.label}>
-        Gender
-      </Text>
-
-      <View style={styles.optionsContainer}>
-        <OptionButton
-          label="Man"
-          selected={gender === 'man'}
-          onPress={() => setGender('man')}
-        />
-
-        <OptionButton
-          label="Woman"
-          selected={gender === 'woman'}
-          onPress={() => setGender('woman')}
-        />
-
-        <OptionButton
-          label="Non-binary"
-          selected={gender === 'non_binary'}
-          onPress={() => setGender('non_binary')}
-        />
-      </View>
-
-      <Text style={styles.label}>
-        Interested in
-      </Text>
-
-      <View style={styles.optionsContainer}>
-        <OptionButton
-          label="Men"
-          selected={interestedIn === 'men'}
-          onPress={() => setInterestedIn('men')}
-        />
-
-        <OptionButton
-          label="Women"
-          selected={interestedIn === 'women'}
-          onPress={() => setInterestedIn('women')}
-        />
-
-        <OptionButton
-          label="Everyone"
-          selected={interestedIn === 'everyone'}
-          onPress={() => setInterestedIn('everyone')}
-        />
-      </View>
-
-      <Text style={styles.label}>
-        About me
-      </Text>
-
-      <TextInput
-        style={[
-          styles.input,
-          styles.aboutInput,
-        ]}
-        value={aboutMe}
-        onChangeText={setAboutMe}
-        placeholder="Optional"
-        placeholderTextColor="#666666"
-        multiline
-        maxLength={500}
-      />
-
-      <Text style={styles.characterCount}>
-        {aboutMe.length}/500
-      </Text>
-
-      <TouchableOpacity
-        style={[
-          styles.button,
-          loading && styles.buttonDisabled,
-        ]}
-        onPress={saveProfile}
-        disabled={loading}
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
       >
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>
-            Continue
-          </Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[
+            styles.container,
+            { paddingBottom: insets.bottom + spacing[8] },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.intro}>
+            <Text style={styles.eyebrow}>YOUR PROFILE</Text>
+            <Text style={styles.title}>Tell people who you are</Text>
+            <Text style={styles.subtitle}>
+              Your profile is reusable and becomes visible when you join an
+              EventSpark Social Room.
+            </Text>
+          </View>
+
+          {validationError ? (
+            <View style={styles.validationCard} accessibilityLiveRegion="assertive">
+              <Text selectable style={styles.validationText}>{validationError}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.formCard}>
+            <View style={styles.field}>
+              <Text style={styles.label}>First name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Alex"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+                autoComplete="name-given"
+                maxLength={50}
+                accessibilityLabel="First name"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Date of birth</Text>
+              <TextInput
+                style={styles.input}
+                value={dateOfBirth}
+                onChangeText={setDateOfBirth}
+                placeholder="2000-12-25"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                inputMode="numeric"
+                maxLength={10}
+                accessibilityLabel="Date of birth"
+                accessibilityHint="Enter your date in year month day format"
+              />
+              <Text style={styles.helper}>Use YYYY-MM-DD</Text>
+            </View>
+
+            <View style={styles.field} accessibilityRole="radiogroup">
+              <Text style={styles.label}>Gender</Text>
+              <View style={styles.optionsContainer}>
+                <OptionButton label="Man" selected={gender === 'man'} onPress={() => setGender('man')} />
+                <OptionButton label="Woman" selected={gender === 'woman'} onPress={() => setGender('woman')} />
+                <OptionButton label="Non-binary" selected={gender === 'non_binary'} onPress={() => setGender('non_binary')} />
+              </View>
+            </View>
+
+            <View style={styles.field} accessibilityRole="radiogroup">
+              <Text style={styles.label}>Interested in</Text>
+              <View style={styles.optionsContainer}>
+                <OptionButton label="Men" selected={interestedIn === 'men'} onPress={() => setInterestedIn('men')} />
+                <OptionButton label="Women" selected={interestedIn === 'women'} onPress={() => setInterestedIn('women')} />
+                <OptionButton label="Everyone" selected={interestedIn === 'everyone'} onPress={() => setInterestedIn('everyone')} />
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>About me</Text>
+                <Text style={styles.characterCount}>{aboutMe.length}/500</Text>
+              </View>
+              <TextInput
+                style={[styles.input, styles.aboutInput]}
+                value={aboutMe}
+                onChangeText={setAboutMe}
+                placeholder="Share something that makes starting a conversation easy"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+                accessibilityLabel="About me"
+              />
+            </View>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && !loading && styles.primaryButtonPressed,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={() => void saveProfile()}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to profile photo"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.textPrimary} />
+            ) : (
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            )}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
   container: {
     flexGrow: 1,
-    backgroundColor: '#0B0B0F',
-    paddingHorizontal: 24,
-    paddingTop: 70,
-    paddingBottom: 40,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    gap: spacing[5],
+    paddingHorizontal: layout.screenGutter,
+    paddingTop: spacing[4],
   },
-
-  title: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
+  intro: { gap: spacing[2] },
+  eyebrow: { ...typography.label, color: colors.secondary, letterSpacing: 1.4 },
+  title: { ...typography.screenTitle, color: colors.textPrimary },
+  subtitle: { ...typography.body, color: colors.textSecondary },
+  validationCard: {
+    padding: spacing[4],
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    backgroundColor: colors.primarySoft,
   },
-
-  subtitle: {
-    color: '#999999',
-    fontSize: 15,
-    marginTop: 10,
-    marginBottom: 30,
-    lineHeight: 22,
+  validationText: { ...typography.supporting, color: colors.danger },
+  formCard: {
+    gap: spacing[6],
+    padding: layout.cardPadding,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surface,
   },
-
-  label: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-
+  field: { gap: spacing[2] },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing[3] },
+  label: { ...typography.label, color: colors.textPrimary },
+  helper: { ...typography.caption, color: colors.textMuted },
+  characterCount: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   input: {
-    backgroundColor: '#18181F',
-    color: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 16,
+    ...typography.body,
+    minHeight: layout.buttonHeight,
+    paddingHorizontal: spacing[4],
+    paddingVertical: 13,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: '#25252E',
+    borderColor: colors.borderSubtle,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
   },
-
-  helper: {
-    color: '#666666',
-    fontSize: 12,
-    marginTop: 6,
-  },
-
-  optionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 4,
-  },
-
+  aboutInput: { minHeight: 128 },
+  optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
   optionButton: {
-    backgroundColor: '#18181F',
+    minHeight: layout.compactButtonHeight,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[4],
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#2A2A33',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 24,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.background,
   },
-
-  optionButtonSelected: {
-    backgroundColor: '#FF3B81',
-    borderColor: '#FF3B81',
-  },
-
-  optionText: {
-    color: '#AAAAAA',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-
-  optionTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-
-  aboutInput: {
-    minHeight: 110,
-    textAlignVertical: 'top',
-  },
-
-  characterCount: {
-    color: '#666666',
-    textAlign: 'right',
-    fontSize: 12,
-    marginTop: 6,
-  },
-
-  button: {
-    backgroundColor: '#FF3B81',
-    borderRadius: 28,
-    paddingVertical: 16,
+  optionButtonPressed: { backgroundColor: colors.surfacePressed },
+  optionButtonSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  optionText: { ...typography.label, color: colors.textSecondary },
+  optionTextSelected: { color: colors.primary },
+  primaryButton: {
+    minHeight: layout.buttonHeight,
     alignItems: 'center',
-    marginTop: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
   },
-
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  primaryButtonPressed: { backgroundColor: colors.primaryPressed },
+  buttonDisabled: { opacity: 0.65 },
+  primaryButtonText: { ...typography.button, color: colors.textPrimary },
 });

@@ -1,147 +1,111 @@
 import { useState } from 'react';
 
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { router, Stack } from 'expo-router';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { router } from 'expo-router';
-
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { colors, layout, radii, spacing, typography } from '@/theme';
 
 export default function AddPhotoScreen() {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [imageUri, setImageUri] = useState<string | null>(null);
-
-  const [mimeType, setMimeType] =
-    useState<string>('image/jpeg');
-
-  const [fileExtension, setFileExtension] =
-    useState<string>('jpg');
-
+  const [mimeType, setMimeType] = useState('image/jpeg');
+  const [fileExtension, setFileExtension] = useState('jpg');
   const [loading, setLoading] = useState(false);
+
+  const previewWidth = Math.min(Math.max(width - 80, 220), 320);
+
+  function setSelectedImage(image: ImagePicker.ImagePickerAsset) {
+    setImageUri(image.uri);
+
+    if (image.mimeType) {
+      setMimeType(image.mimeType);
+    }
+
+    setFileExtension(
+      image.fileName?.split('.').pop()?.toLowerCase() ??
+        image.mimeType?.split('/').pop() ??
+        'jpg'
+    );
+  }
 
   async function chooseFromGallery() {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert(
           'Permission required',
           'EventSpark needs access to your photos so you can select a profile picture.'
         );
-
         return;
       }
 
-      const result =
-        await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [4, 5],
-          quality: 0.8,
-        });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 5],
+        quality: 0.8,
+      });
 
-      if (result.canceled) {
-        return;
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0]);
       }
-
-      const image = result.assets[0];
-
-      setImageUri(image.uri);
-
-      if (image.mimeType) {
-        setMimeType(image.mimeType);
-      }
-
-      const extension =
-        image.fileName?.split('.').pop()?.toLowerCase()
-        ?? image.mimeType?.split('/').pop()
-        ?? 'jpg';
-
-      setFileExtension(extension);
     } catch (error) {
       console.error('Image picker error:', error);
-
-      Alert.alert(
-        'Error',
-        'Could not open your photo gallery.'
-      );
+      Alert.alert('Error', 'Could not open your photo gallery.');
     }
   }
 
   async function takePhoto() {
     try {
-      const permission =
-        await ImagePicker.requestCameraPermissionsAsync();
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert(
           'Camera permission required',
           'EventSpark needs camera access so you can take a profile photo.'
         );
-
         return;
       }
 
-      const result =
-        await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [4, 5],
-          quality: 0.8,
-        });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 5],
+        quality: 0.8,
+      });
 
-      if (result.canceled) {
-        return;
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0]);
       }
-
-      const image = result.assets[0];
-
-      setImageUri(image.uri);
-
-      if (image.mimeType) {
-        setMimeType(image.mimeType);
-      }
-
-      const extension =
-        image.fileName?.split('.').pop()?.toLowerCase()
-        ?? image.mimeType?.split('/').pop()
-        ?? 'jpg';
-
-      setFileExtension(extension);
     } catch (error) {
       console.error('Camera error:', error);
-
-      Alert.alert(
-        'Error',
-        'Could not open the camera.'
-      );
+      Alert.alert('Error', 'Could not open the camera.');
     }
   }
 
   async function uploadPhoto() {
     if (!imageUri) {
-      Alert.alert(
-        'Photo required',
-        'Please choose or take a profile photo.'
-      );
-
+      Alert.alert('Photo required', 'Please choose or take a profile photo.');
       return;
     }
 
     try {
       setLoading(true);
 
-      /*
-       * Get currently authenticated user.
-       */
       const {
         data: { user },
         error: userError,
@@ -152,94 +116,44 @@ export default function AddPhotoScreen() {
       }
 
       if (!user) {
-        Alert.alert(
-          'Session expired',
-          'Please log in again.'
-        );
-
+        Alert.alert('Session expired', 'Please log in again.');
         router.replace('/signup');
-
         return;
       }
 
-      /*
-       * Convert the local phone image into binary data
-       * that Supabase Storage can upload.
-       */
       const response = await fetch(imageUri);
+      const arrayBuffer = await response.arrayBuffer();
+      const filePath = `${user.id}/profile.${fileExtension}`;
 
-      const arrayBuffer =
-        await response.arrayBuffer();
-
-      /*
-       * Every user gets their own folder.
-       *
-       * Example:
-       *
-       * profile-photos/
-       *   573c...userUUID/
-       *       profile.jpg
-       */
-      const filePath =
-        `${user.id}/profile.${fileExtension}`;
-
-      /*
-       * Upload into our PRIVATE Supabase bucket.
-       */
-      const {
-        error: uploadError,
-      } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('profile-photos')
-        .upload(
-          filePath,
-          arrayBuffer,
-          {
-            contentType: mimeType,
-            upsert: true,
-          }
-        );
+        .upload(filePath, arrayBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
 
       if (uploadError) {
         throw uploadError;
       }
 
-      /*
-       * Store only the STORAGE PATH in PostgreSQL.
-       *
-       * We do NOT store a permanent public URL.
-       */
-      const {
-        error: profileError,
-      } = await supabase
+      const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          photo_path: filePath,
-        })
-        .eq(
-          'user_id',
-          user.id
-        );
+        .update({ photo_path: filePath })
+        .eq('user_id', user.id);
 
       if (profileError) {
         throw profileError;
       }
 
-      Alert.alert(
-        'Profile complete',
-        'Your profile photo has been saved.'
-      );
-
+      Alert.alert('Profile complete', 'Your profile photo has been saved.');
       router.replace('/home');
-    } catch (error: any) {
-      console.error(
-        'Photo upload error:',
-        error
-      );
-
+    } catch (error: unknown) {
+      console.error('Photo upload error:', error);
       Alert.alert(
         'Upload failed',
-        error.message ??
-          'Something went wrong while uploading your photo.'
+        error instanceof Error
+          ? error.message
+          : 'Something went wrong while uploading your photo.'
       );
     } finally {
       setLoading(false);
@@ -247,169 +161,217 @@ export default function AddPhotoScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        Add your photo
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Your photo helps people at the event
-        recognize you.
-      </Text>
-
-      <View style={styles.photoContainer}>
-        {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.photo}
-          />
-        ) : (
-          <View style={styles.photoPlaceholder}>
-            <Text style={styles.photoPlaceholderText}>
-              Your Photo
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={takePhoto}
-        disabled={loading}
+    <>
+      <Stack.Screen
+        options={{
+          title: 'Profile photo',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+        }}
+      />
+      <ScrollView
+        style={styles.screen}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: insets.bottom + spacing[8] },
+        ]}
       >
-        <Text style={styles.secondaryButtonText}>
-          Take Photo
-        </Text>
-      </TouchableOpacity>
+        <View style={styles.intro}>
+          <Text style={styles.eyebrow}>ONE LAST STEP</Text>
+          <Text style={styles.title}>Add a recognizable photo</Text>
+          <Text style={styles.subtitle}>
+            A clear portrait helps people recognize you at the event.
+          </Text>
+        </View>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={chooseFromGallery}
-        disabled={loading}
-      >
-        <Text style={styles.secondaryButtonText}>
-          Choose From Gallery
-        </Text>
-      </TouchableOpacity>
-
-      {imageUri && (
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            loading && styles.disabledButton,
-          ]}
-          onPress={uploadPhoto}
-          disabled={loading}
+        <View
+          style={[styles.photoFrame, { width: previewWidth }]}
+          accessibilityLabel={imageUri ? 'Selected profile photo preview' : 'No profile photo selected'}
         >
-          {loading ? (
-            <ActivityIndicator
-              color="#FFFFFF"
+          {imageUri ? (
+            <Image
+              source={imageUri}
+              style={styles.photo}
+              contentFit="cover"
+              transition={180}
+              accessible
+              accessibilityLabel="Selected profile photo"
             />
           ) : (
-            <Text style={styles.primaryButtonText}>
-              Continue
-            </Text>
+            <View style={styles.photoPlaceholder}>
+              <View style={styles.placeholderAvatar}>
+                <Text style={styles.placeholderAvatarText}>+</Text>
+              </View>
+              <Text style={styles.photoPlaceholderTitle}>Choose your best photo</Text>
+              <Text style={styles.photoPlaceholderText}>Portrait photos work best.</Text>
+            </View>
           )}
-        </TouchableOpacity>
-      )}
+        </View>
 
-      <Text style={styles.privacyText}>
-        Your photo is only available through
-        EventSpark and will be shown according to
-        your event participation settings.
-      </Text>
-    </View>
+        <View style={styles.actions}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.secondaryButtonPressed,
+              loading && styles.disabledButton,
+            ]}
+            onPress={() => void takePhoto()}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Take a profile photo"
+          >
+            <Text style={styles.secondaryButtonText}>Take photo</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.secondaryButtonPressed,
+              loading && styles.disabledButton,
+            ]}
+            onPress={() => void chooseFromGallery()}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Choose a profile photo from your gallery"
+          >
+            <Text style={styles.secondaryButtonText}>Choose from gallery</Text>
+          </Pressable>
+
+          {imageUri ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && !loading && styles.primaryButtonPressed,
+                loading && styles.disabledButton,
+              ]}
+              onPress={() => void uploadPhoto()}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Save profile photo and continue"
+              accessibilityState={{ disabled: loading, busy: loading }}
+            >
+              {loading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color={colors.textPrimary} />
+                  <Text style={styles.primaryButtonText}>Uploading…</Text>
+                </View>
+              ) : (
+                <Text style={styles.primaryButtonText}>Save and continue</Text>
+              )}
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.privacyCard}>
+          <View style={styles.lockBadge}>
+            <Text style={styles.lockText}>✓</Text>
+          </View>
+          <View style={styles.privacyCopy}>
+            <Text style={styles.privacyTitle}>Your photo stays private</Text>
+            <Text style={styles.privacyText}>
+              EventSpark only displays it according to your event participation settings.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
   container: {
-    flex: 1,
-    backgroundColor: '#0B0B0F',
-    paddingHorizontal: 24,
-    paddingTop: 70,
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    gap: spacing[6],
+    paddingHorizontal: layout.screenGutter,
+    paddingTop: spacing[4],
   },
-
-  title: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-
-  subtitle: {
-    color: '#999999',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
-    marginBottom: 30,
-  },
-
-  photoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-
-  photoPlaceholder: {
-    width: 220,
-    height: 280,
-    backgroundColor: '#18181F',
-    borderRadius: 24,
+  intro: { gap: spacing[2] },
+  eyebrow: { ...typography.label, color: colors.secondary, letterSpacing: 1.4 },
+  title: { ...typography.screenTitle, color: colors.textPrimary },
+  subtitle: { ...typography.body, color: colors.textSecondary },
+  photoFrame: {
+    aspectRatio: 4 / 5,
+    alignSelf: 'center',
+    overflow: 'hidden',
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: '#2A2A33',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  photo: { width: '100%', height: '100%' },
+  photoPlaceholder: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[2],
+    padding: spacing[6],
+    backgroundColor: colors.secondarySoft,
   },
-
-  photoPlaceholderText: {
-    color: '#666666',
-    fontSize: 16,
-  },
-
-  photo: {
-    width: 220,
-    height: 280,
-    borderRadius: 24,
-  },
-
-  secondaryButton: {
-    backgroundColor: '#18181F',
+  placeholderAvatar: {
+    width: 72,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#2A2A33',
-    borderRadius: 28,
-    paddingVertical: 15,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceElevated,
+  },
+  placeholderAvatarText: { fontSize: 34, lineHeight: 40, color: colors.secondary },
+  photoPlaceholderTitle: { ...typography.bodyEmphasized, color: colors.textPrimary, textAlign: 'center' },
+  photoPlaceholderText: { ...typography.supporting, color: colors.textSecondary, textAlign: 'center' },
+  actions: { gap: spacing[3] },
+  secondaryButton: {
+    minHeight: layout.buttonHeight,
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surface,
   },
-
-  secondaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-
+  secondaryButtonPressed: { borderColor: colors.borderStrong, backgroundColor: colors.surfacePressed },
+  secondaryButtonText: { ...typography.button, color: colors.textPrimary },
   primaryButton: {
-    backgroundColor: '#FF3B81',
-    borderRadius: 28,
-    paddingVertical: 16,
+    minHeight: layout.buttonHeight,
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
   },
-
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+  primaryButtonPressed: { backgroundColor: colors.primaryPressed },
+  primaryButtonText: { ...typography.button, color: colors.textPrimary },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  disabledButton: { opacity: 0.65 },
+  privacyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    padding: spacing[4],
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    backgroundColor: colors.secondarySoft,
   },
-
-  disabledButton: {
-    opacity: 0.6,
+  lockBadge: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceElevated,
   },
-
-  privacyText: {
-    color: '#666666',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 24,
-  },
+  lockText: { ...typography.label, color: colors.success },
+  privacyCopy: { flex: 1, gap: spacing[1] },
+  privacyTitle: { ...typography.label, color: colors.textPrimary },
+  privacyText: { ...typography.caption, color: colors.textSecondary },
 });
