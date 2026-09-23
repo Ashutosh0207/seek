@@ -59,7 +59,6 @@ export default function SignupScreen() {
         return;
       }
 
-      console.log('Created Supabase user:', data.user.id);
       Alert.alert('Account created', 'Your EventSpark account has been created.');
       router.replace('/profile-setup');
     } catch (error) {

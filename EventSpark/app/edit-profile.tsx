@@ -22,14 +22,41 @@ import { colors, layout, radii, spacing, typography } from '@/theme';
 type Profile = {
   user_id: string;
   first_name: string;
+  date_of_birth: string;
   gender: string;
   interested_in: string | null;
   about_me: string | null;
   photo_path: string | null;
 };
 
-const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
-const INTEREST_OPTIONS = ['Male', 'Female', 'Everyone'];
+const GENDER_OPTIONS = [
+  { label: 'Man', value: 'man' },
+  { label: 'Woman', value: 'woman' },
+  { label: 'Non-binary', value: 'non_binary' },
+] as const;
+
+const INTEREST_OPTIONS = [
+  { label: 'Men', value: 'men' },
+  { label: 'Women', value: 'women' },
+  { label: 'Everyone', value: 'everyone' },
+] as const;
+
+function normalizeGender(value: string | null) {
+  const normalized = value?.trim().toLowerCase().replace(/[ -]/g, '_');
+
+  if (normalized === 'male') return 'man';
+  if (normalized === 'female') return 'woman';
+  if (normalized === 'other') return 'non_binary';
+  return normalized ?? '';
+}
+
+function normalizeInterest(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === 'male') return 'men';
+  if (normalized === 'female') return 'women';
+  return normalized ?? '';
+}
 
 type OptionButtonProps = {
   label: string;
@@ -73,6 +100,7 @@ export default function EditProfileScreen() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState('');
   const [interestedIn, setInterestedIn] = useState('');
   const [aboutMe, setAboutMe] = useState('');
@@ -119,6 +147,7 @@ export default function EditProfileScreen() {
         .select(`
           user_id,
           first_name,
+          date_of_birth,
           gender,
           interested_in,
           about_me,
@@ -133,8 +162,9 @@ export default function EditProfileScreen() {
 
       const profile = data as Profile;
       setFirstName(profile.first_name ?? '');
-      setGender(profile.gender ?? '');
-      setInterestedIn(profile.interested_in ?? '');
+      setDateOfBirth(profile.date_of_birth ?? '');
+      setGender(normalizeGender(profile.gender));
+      setInterestedIn(normalizeInterest(profile.interested_in));
       setAboutMe(profile.about_me ?? '');
       setPhotoPath(profile.photo_path);
 
@@ -346,6 +376,11 @@ export default function EditProfileScreen() {
       return;
     }
 
+    if (!dateOfBirth.trim()) {
+      setValidationError('Enter your date of birth before saving.');
+      return;
+    }
+
     if (!interestedIn) {
       setValidationError('Select who you are interested in before saving.');
       return;
@@ -372,6 +407,7 @@ export default function EditProfileScreen() {
         .from('profiles')
         .update({
           first_name: trimmedFirstName,
+          date_of_birth: dateOfBirth.trim(),
           gender,
           interested_in: interestedIn,
           about_me: trimmedAboutMe || null,
@@ -534,15 +570,33 @@ export default function EditProfileScreen() {
                 />
               </View>
 
+              <View style={styles.field}>
+                <Text style={styles.label}>Date of birth</Text>
+                <TextInput
+                  style={styles.input}
+                  value={dateOfBirth}
+                  onChangeText={setDateOfBirth}
+                  placeholder="2000-12-25"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  inputMode="numeric"
+                  maxLength={10}
+                  accessibilityLabel="Date of birth"
+                  accessibilityHint="Enter your date in year month day format"
+                />
+                <Text style={styles.helper}>Use YYYY-MM-DD</Text>
+              </View>
+
               <View style={styles.field} accessibilityRole="radiogroup">
                 <Text style={styles.label}>Gender</Text>
                 <View style={styles.optionsContainer}>
                   {GENDER_OPTIONS.map((option) => (
                     <OptionButton
-                      key={option}
-                      label={option}
-                      selected={gender === option}
-                      onPress={() => setGender(option)}
+                      key={option.value}
+                      label={option.label}
+                      selected={gender === option.value}
+                      onPress={() => setGender(option.value)}
                     />
                   ))}
                 </View>
@@ -553,10 +607,10 @@ export default function EditProfileScreen() {
                 <View style={styles.optionsContainer}>
                   {INTEREST_OPTIONS.map((option) => (
                     <OptionButton
-                      key={option}
-                      label={option}
-                      selected={interestedIn === option}
-                      onPress={() => setInterestedIn(option)}
+                      key={option.value}
+                      label={option.label}
+                      selected={interestedIn === option.value}
+                      onPress={() => setInterestedIn(option.value)}
                     />
                   ))}
                 </View>
@@ -724,6 +778,7 @@ const styles = StyleSheet.create({
   field: { gap: spacing[2] },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing[3] },
   label: { ...typography.label, color: colors.textPrimary },
+  helper: { ...typography.caption, color: colors.textMuted },
   characterCount: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   input: {
     ...typography.body,

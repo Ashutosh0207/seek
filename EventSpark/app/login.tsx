@@ -43,7 +43,6 @@ export default function LoginScreen() {
       if (error) throw error;
       if (!data.user) throw new Error('No user was returned after login.');
 
-      console.log('Logged in user:', data.user.id);
       router.replace('/home');
     } catch (error: unknown) {
       console.error('Login error:', error);

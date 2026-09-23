@@ -123,13 +123,13 @@ export default function AddPhotoScreen() {
 
       const response = await fetch(imageUri);
       const arrayBuffer = await response.arrayBuffer();
-      const filePath = `${user.id}/profile.${fileExtension}`;
+      const filePath = `${user.id}/profile-${Date.now()}.${fileExtension}`;
 
       const { error: uploadError } = await supabase.storage
         .from('profile-photos')
         .upload(filePath, arrayBuffer, {
           contentType: mimeType,
-          upsert: true,
+          upsert: false,
         });
 
       if (uploadError) {
@@ -142,6 +142,14 @@ export default function AddPhotoScreen() {
         .eq('user_id', user.id);
 
       if (profileError) {
+        const { error: cleanupError } = await supabase.storage
+          .from('profile-photos')
+          .remove([filePath]);
+
+        if (cleanupError) {
+          console.error('Photo cleanup error:', cleanupError);
+        }
+
         throw profileError;
       }
 

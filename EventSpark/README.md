@@ -1,50 +1,73 @@
-# Welcome to your Expo app 👋
+# EventSpark
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+EventSpark is an event-based social and dating application built with Expo,
+React Native, TypeScript, Expo Router, and Supabase.
 
-## Get started
+People join a real-world event by scanning its QR code, enter that event's
+Social Room, discover eligible attendees, send visible likes, form mutual
+matches, and chat.
 
-1. Install dependencies
+## Requirements
 
-   ```bash
-   npm install
-   ```
+- Node.js compatible with the Expo version in `package.json`
+- Expo Go or an Android/iOS development environment
+- A configured Supabase project
 
-2. Start the app
+## Environment
 
-   ```bash
-   npx expo start
-   ```
+Create a local `.env` file containing:
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_KEY=your-publishable-or-anon-client-key
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`EXPO_PUBLIC_SUPABASE_KEY` must be a publishable/anonymous client key. Never
+place a Supabase service-role key or any other secret in an `EXPO_PUBLIC_`
+variable because values with that prefix are included in the client app.
 
-## Learn more
+## Run locally
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm install
+npm start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Scan the development-server QR code with Expo Go, or use one of the platform
+scripts:
 
-## Join the community
+```bash
+npm run android
+npm run ios
+npm run web
+```
 
-Join our community of developers creating universal apps.
+## Validation
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npx tsc --noEmit
+npm run lint
+```
+
+## Architecture
+
+The React Native application owns UI, navigation, and temporary screen state.
+Supabase Auth owns authentication; PostgreSQL RPC functions enforce event,
+discovery, like, match, and message operations; RLS authorizes data access;
+Supabase Storage keeps profile photos private; and Supabase Realtime delivers
+live chat updates.
+
+Profile records store private Storage paths rather than public URLs. The app
+requests short-lived signed URLs when it needs to render a profile photo.
+
+See the project documentation for more detail:
+
+- [`docs/PRODUCT.md`](docs/PRODUCT.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md)
+
+## Backend source-of-truth note
+
+This repository currently does not contain Supabase migrations, RPC
+definitions, RLS policies, or Storage policies. Those backend definitions must
+be reviewed in the configured Supabase project before production deployment.

@@ -135,7 +135,11 @@ export default function DiscoverScreen() {
   );
 
   useEffect(() => {
-    void loadDiscoveryProfiles();
+    const loadTimer = setTimeout(() => {
+      void loadDiscoveryProfiles();
+    }, 0);
+
+    return () => clearTimeout(loadTimer);
   }, [loadDiscoveryProfiles]);
 
   const handleLike = useCallback(
