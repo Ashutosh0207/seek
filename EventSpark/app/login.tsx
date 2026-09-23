@@ -1,226 +1,166 @@
 import { useState } from 'react';
 
+import { router, Stack } from 'expo-router';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
+  View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { router } from 'expo-router';
-
-import { supabase } from '../lib/supabase';
-
+import { supabase } from '@/lib/supabase';
+import { colors, layout, radii, spacing, typography } from '@/theme';
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-
   async function handleLogin() {
     if (!email.trim()) {
-      Alert.alert(
-        'Missing email',
-        'Please enter your email.'
-      );
+      Alert.alert('Missing email', 'Please enter your email.');
       return;
     }
-
     if (!password) {
-      Alert.alert(
-        'Missing password',
-        'Please enter your password.'
-      );
+      Alert.alert('Missing password', 'Please enter your password.');
       return;
     }
 
     try {
       setLoading(true);
-
-      const {
-        data,
-        error,
-      } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
+      if (!data.user) throw new Error('No user was returned after login.');
 
-      if (!data.user) {
-        throw new Error(
-          'No user was returned after login.'
-        );
-      }
-
-      console.log(
-        'Logged in user:',
-        data.user.id
-      );
-
+      console.log('Logged in user:', data.user.id);
       router.replace('/home');
-
-    } catch (error: any) {
-      console.error(
-        'Login error:',
-        error
-      );
-
-      Alert.alert(
-        'Login failed',
-        error.message ??
-          'Please check your email and password.'
-      );
-
+    } catch (error: unknown) {
+      console.error('Login error:', error);
+      const message = error instanceof Error ? error.message : undefined;
+      Alert.alert('Login failed', message ?? 'Please check your email and password.');
     } finally {
       setLoading(false);
     }
   }
 
-
   return (
-    <View style={styles.container}>
-
-      <Text style={styles.title}>
-        Welcome back
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Log in to EventSpark
-      </Text>
-
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#666666"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#666666"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-
-
-      <TouchableOpacity
-        style={[
-          styles.button,
-          loading && styles.buttonDisabled,
-        ]}
-        onPress={handleLogin}
-        disabled={loading}
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
+    >
+      <Stack.Screen options={{ title: '', headerTransparent: true, headerTintColor: colors.textPrimary, headerShadowVisible: false }} />
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing[6]) }]}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
       >
-        {loading ? (
-          <ActivityIndicator
-            color="#FFFFFF"
-          />
-        ) : (
-          <Text style={styles.buttonText}>
-            Log In
-          </Text>
-        )}
-      </TouchableOpacity>
+        <View style={styles.heading}>
+          <Text style={styles.eyebrow}>WELCOME BACK</Text>
+          <Text style={styles.title}>Log in to your account</Text>
+          <Text style={styles.subtitle}>Your next connection could already be at the event.</Text>
+        </View>
 
+        <View style={styles.form}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              keyboardType="email-address"
+              returnKeyType="next"
+              editable={!loading}
+              accessibilityLabel="Email address"
+            />
+          </View>
 
-      <TouchableOpacity
-        style={styles.signupLink}
-        onPress={() =>
-          router.push('/signup')
-        }
-      >
-        <Text style={styles.signupText}>
-          Dont have an account? Sign up
-        </Text>
-      </TouchableOpacity>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              placeholderTextColor={colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="current-password"
+              returnKeyType="go"
+              onSubmitEditing={() => void handleLogin()}
+              editable={!loading}
+              accessibilityLabel="Password"
+            />
+          </View>
 
-    </View>
+          <Pressable
+            style={({ pressed }) => [styles.primaryButton, loading && styles.buttonDisabled, pressed && !loading && styles.primaryButtonPressed]}
+            onPress={() => void handleLogin()}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Log in"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <View style={styles.loadingContent}>
+                <ActivityIndicator color={colors.textPrimary} />
+                <Text style={styles.primaryButtonText}>Logging in…</Text>
+              </View>
+            ) : (
+              <Text style={styles.primaryButtonText}>Log in</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.alternateAction}>
+          <Text style={styles.alternateText}>New to EventSpark?</Text>
+          <Pressable
+            style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+            onPress={() => router.push('/signup')}
+            disabled={loading}
+            accessibilityRole="link"
+          >
+            <Text style={styles.linkText}>Create an account</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
-
 const styles = StyleSheet.create({
-
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0B0F',
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-  },
-
-
-  title: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-
-
-  subtitle: {
-    color: '#888888',
-    fontSize: 15,
-    marginTop: 8,
-    marginBottom: 30,
-  },
-
-
-  input: {
-    backgroundColor: '#18181F',
-    color: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#25252E',
-    marginBottom: 14,
-  },
-
-
-  button: {
-    backgroundColor: '#FF3B81',
-    paddingVertical: 16,
-    borderRadius: 28,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-
-
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-
-
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-
-
-  signupLink: {
-    alignItems: 'center',
-    marginTop: 24,
-  },
-
-
-  signupText: {
-    color: '#999999',
-    fontSize: 14,
-  },
-
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: layout.screenGutter, paddingTop: spacing[12] },
+  heading: { marginBottom: spacing[8] },
+  eyebrow: { marginBottom: spacing[3], color: colors.primary, ...typography.label, letterSpacing: 1.6 },
+  title: { color: colors.textPrimary, ...typography.screenTitle, letterSpacing: -0.5 },
+  subtitle: { marginTop: spacing[3], color: colors.textSecondary, ...typography.body },
+  form: { gap: spacing[5] },
+  fieldGroup: { gap: spacing[2] },
+  label: { color: colors.textSecondary, ...typography.label },
+  input: { minHeight: 54, borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: radii.md, backgroundColor: colors.surface, paddingHorizontal: spacing[4], paddingVertical: spacing[3], color: colors.textPrimary, ...typography.body },
+  primaryButton: { minHeight: layout.buttonHeight, alignItems: 'center', justifyContent: 'center', marginTop: spacing[1], borderRadius: radii.pill, backgroundColor: colors.primary, paddingHorizontal: spacing[5] },
+  primaryButtonPressed: { backgroundColor: colors.primaryPressed, transform: [{ scale: 0.99 }] },
+  buttonDisabled: { opacity: 0.68 },
+  loadingContent: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  primaryButtonText: { color: colors.textPrimary, ...typography.button },
+  alternateAction: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: spacing[8], gap: spacing[1] },
+  alternateText: { color: colors.textMuted, ...typography.supporting },
+  linkButton: { minHeight: layout.minimumTouchTarget, justifyContent: 'center', paddingHorizontal: spacing[1] },
+  linkButtonPressed: { opacity: 0.7 },
+  linkText: { color: colors.primary, ...typography.label },
 });
